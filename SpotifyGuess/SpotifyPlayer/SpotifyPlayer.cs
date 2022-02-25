@@ -46,6 +46,10 @@ namespace SpotifyGuess
         public async Task PlayTracks(string trackId)
         {
             var devices = await _playerApi.GetDevices(GetAccessToken());
+            if (!devices.Any())
+            {
+                throw new Exception("Entre em algum dispositivo Spotify!");
+            }
 
             await _playerApi.PlayTracks(trackId, GetAccessToken(), deviceId: devices[0].Id);
         }

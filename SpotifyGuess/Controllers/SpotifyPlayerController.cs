@@ -1,12 +1,18 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace SpotifyGuess.Controllers
 {
     public class SpotifyPlayerController : Controller
     {
         readonly ISpotifyPlayer _spotifyPlayer;
+        readonly IMemoryCache _memoryCache;
 
-        public SpotifyPlayerController(ISpotifyPlayer spotifyPlayer) => _spotifyPlayer = spotifyPlayer;
+        public SpotifyPlayerController(ISpotifyPlayer spotifyPlayer, IMemoryCache memoryCache)
+        {
+            _spotifyPlayer = spotifyPlayer;
+            _memoryCache = memoryCache;
+        }
 
         public IActionResult Index()
         {
@@ -21,16 +27,28 @@ namespace SpotifyGuess.Controllers
             }
             else
             {
-                return RedirectToAction(nameof(Index));
+                return View(nameof(Index), Enumerable.Empty<string>());
             }
         }
-
         public async Task<IActionResult> PlayShuffle()
         {
-            var tracks = await _spotifyPlayer.GetCurrentUsersTracks();
-            var randomTrack = tracks.ElementAt(Random.Shared.Next(tracks.Count()));
-            await _spotifyPlayer.PlayTracks(randomTrack.Track.Id);
-            return RedirectToAction(nameof(Index));
+            try
+            {
+                var tracks = await _memoryCache.GetOrCreate("tracks", async (e) =>
+                {
+                    var tracks = await _spotifyPlayer.GetCurrentUsersTracks();
+                    return tracks.Select(x => x.Track.Id);
+                });
+
+                var randomTrackId = tracks.ElementAt(Random.Shared.Next(tracks.Count()));
+                await _spotifyPlayer.PlayTracks(randomTrackId);
+                return View(nameof(Index), tracks);
+            }
+            catch (Exception ex)
+            {
+                ViewBag.ErrorMessage = ex.Message;
+                return View(nameof(Index));
+            }
         }
     }
 }
