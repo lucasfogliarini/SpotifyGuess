@@ -1,4 +1,5 @@
-﻿using SpotifyApi.NetCore;
+﻿using Microsoft.Extensions.Caching.Memory;
+using SpotifyApi.NetCore;
 using SpotifyApi.NetCore.Authorization;
 
 namespace SpotifyGuess
@@ -9,35 +10,49 @@ namespace SpotifyGuess
         readonly IPlayerApi _playerApi;
         readonly IPlaylistsApi _playlistsApi;
         readonly ITracksApi _tracksApi;
+        readonly IUsersProfileApi _usersProfileApi;
+        readonly IMemoryCache _memoryCache;
 
-        readonly string[] scopes = new[]{ "user-modify-playback-state", "user-read-playback-state" };
+        readonly string[] scopes = new[]{ "playlist-read-private", "user-modify-playback-state", "user-read-playback-state" };
         const string lucasfogliariniId = "12145833562";
 
         public SpotifyPlayer(IUserAccountsService userAccountsService,
                              IPlayerApi playerApi,
                              IPlaylistsApi playlistsApi,
-                             ITracksApi tracksApi)
+                             ITracksApi tracksApi,
+                             IUsersProfileApi usersProfileApi,
+                             IMemoryCache memoryCache)
         {
             _userAccountsService = userAccountsService;
             _playerApi = playerApi;
             _playlistsApi = playlistsApi;
             _tracksApi = tracksApi;
+            _usersProfileApi = usersProfileApi;
+            _memoryCache = memoryCache;
         }
 
+        public async Task<string?> Login(string? code)
+        {
+            if (code == null)
+            {
+                string state = Guid.NewGuid().ToString("N");
+                var url = _userAccountsService.AuthorizeUrl(state, scopes);
+                return url;
+            }
+            var token = await _userAccountsService.RequestAccessRefreshToken(code);
+            _memoryCache.Set(nameof(BearerAccessToken.AccessToken), token.AccessToken);
+            return null;
+        }
         public async Task PlayTracks(string trackId)
         {
-            //string state = Guid.NewGuid().ToString("N");
-            //var url = _userAccountsService.AuthorizeUrl(state, scopes);
+            var devices = await _playerApi.GetDevices(GetAccessToken());
 
-            //var token = await _userAccountsService.RequestAccessRefreshToken(code);
-            //var devices = await _playerApi.GetDevices(token.AccessToken);
-
-            //await _playerApi.PlayTracks(trackId, token.AccessToken, deviceId: devices[0].Id);
+            await _playerApi.PlayTracks(trackId, GetAccessToken(), deviceId: devices[0].Id);
         }
         public async Task<IEnumerable<TrackRate>> TracksByPopularity(string? playlistName = null, bool desc = true)
         {
             var tracks = playlistName == null ? null : await GetPlaylistTracks(playlistName);
-            tracks ??= await GetPublicTracks(playlistName);
+            tracks ??= await GetCurrentUsersTracks(playlistName);
 
             var tracksRate = tracks.Select(e => new TrackRate
             {
@@ -51,7 +66,7 @@ namespace SpotifyGuess
         public async Task<IEnumerable<TrackRate>> TracksByAge(string? playlistName = null, bool desc = true)
         {
             var tracks = playlistName == null ? null : await GetPlaylistTracks(playlistName);
-            tracks ??= await GetPublicTracks(playlistName);
+            tracks ??= await GetCurrentUsersTracks(playlistName);
 
             var tracksRate = tracks.Select(e => new TrackRate
             {
@@ -64,11 +79,11 @@ namespace SpotifyGuess
         }
         public async Task<IEnumerable<TrackRate>> TracksByDanceability(bool desc = true)
         {
-            var publicTracks = await GetPublicTracks();
+            var currentUsersTracks = await GetCurrentUsersTracks();
             var tracksRate = new List<TrackRate>();
-            foreach (var track in publicTracks)
+            foreach (var track in currentUsersTracks)
             {
-                var trackAudioFeatures = await TracksApi.GetTrackAudioFeatures(track.Track.Id);
+                var trackAudioFeatures = await _tracksApi.GetTrackAudioFeatures(track.Track.Id);
                 tracksRate.Add(new TrackRate
                 {
                     Id = track.Track.Id,
@@ -81,11 +96,11 @@ namespace SpotifyGuess
         }
         public async Task<IEnumerable<TrackRate>> TracksByEnergy(bool desc = true)
         {
-            var publicTracks = await GetPublicTracks();
+            var publicTracks = await GetCurrentUsersTracks();
             var tracksRate = new List<TrackRate>();
             foreach (var track in publicTracks)
             {
-                var trackAudioFeatures = await TracksApi.GetTrackAudioFeatures(track.Track.Id);
+                var trackAudioFeatures = await _tracksApi.GetTrackAudioFeatures(track.Track.Id);
                 tracksRate.Add(new TrackRate
                 {
                     Id = track.Track.Id,
@@ -96,30 +111,33 @@ namespace SpotifyGuess
             }
             return Order(tracksRate, desc);
         }
-        public async Task<IEnumerable<PlaylistTrack>> GetPublicTracks(string? playlistName = null)
+        public async Task<IEnumerable<PlaylistTrack>> GetCurrentUsersTracks(string? playlistName = null)
         {
-            var publicPlaylists = await PlaylistsApi.GetPlaylists(UserId);
-            var publicTracks = new List<PlaylistTrack>();
-            IEnumerable<PlaylistSimplified> publicPlaylistsSimplified = publicPlaylists.Items;
+            //dont works yet
+            //var currentUsersPlaylists = await _playlistsApi.GetCurrentUsersPlaylists(accessToken: GetAccessToken());
+            var user = await _usersProfileApi.GetCurrentUsersProfile(GetAccessToken());
+            var currentUsersPlaylists = await _playlistsApi.GetPlaylists(user.Id, GetAccessToken());
+            var currentUsersTracks = new List<PlaylistTrack>();
+            IEnumerable<PlaylistSimplified> publicPlaylistsSimplified = currentUsersPlaylists.Items;
             if (playlistName != null)
             {
-                publicPlaylistsSimplified = publicPlaylists.Items.Where(e => e.Name.Contains(playlistName));
+                publicPlaylistsSimplified = currentUsersPlaylists.Items.Where(e => e.Name.Contains(playlistName));
             }
 
             foreach (var playlist in publicPlaylistsSimplified)
             {
-                PlaylistPaged playlistPaged = await PlaylistsApi.GetTracks(playlist.Id);
-                publicTracks.AddRange(playlistPaged.Items);
+                PlaylistPaged playlistPaged = await _playlistsApi.GetTracks(playlist.Id, GetAccessToken());
+                currentUsersTracks.AddRange(playlistPaged.Items);
             }
-            return publicTracks;
+            return currentUsersTracks;
         }
         public async Task<IEnumerable<PlaylistTrack>> GetPlaylistTracks(string playlistId)
         {
             PlaylistPaged playlistPaged = new();
             try
             {
-                var playlist = await PlaylistsApi.GetPlaylist(playlistId);
-                playlistPaged = await PlaylistsApi.GetTracks(playlist.Id);
+                var playlist = await _playlistsApi.GetPlaylist(playlistId);
+                playlistPaged = await _playlistsApi.GetTracks(playlist.Id);
                 return playlistPaged.Items;
             }
             catch (Exception)
@@ -131,5 +149,6 @@ namespace SpotifyGuess
         {
             return desc ? tracksRate.OrderByDescending(e => e.Rate) : tracksRate.OrderBy(e=>e.Rate);
         }
+        private string? GetAccessToken() => _memoryCache.Get(nameof(BearerAccessToken.AccessToken)).ToString();
     }
 }
