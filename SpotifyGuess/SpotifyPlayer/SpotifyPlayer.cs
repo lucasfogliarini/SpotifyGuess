@@ -120,7 +120,7 @@ namespace SpotifyGuess
             //dont works yet
             //var currentUsersPlaylists = await _playlistsApi.GetCurrentUsersPlaylists(accessToken: GetAccessToken());
             var user = await _usersProfileApi.GetCurrentUsersProfile(GetAccessToken());
-            var currentUsersPlaylists = await _playlistsApi.GetPlaylists(user.Id, GetAccessToken());
+            var currentUsersPlaylists = await _playlistsApi.GetPlaylists(user.Id, GetAccessToken(), limit: 50);
             var currentUsersTracks = new List<PlaylistTrack>();
             IEnumerable<PlaylistSimplified> publicPlaylistsSimplified = currentUsersPlaylists.Items;
             if (playlistName != null)
