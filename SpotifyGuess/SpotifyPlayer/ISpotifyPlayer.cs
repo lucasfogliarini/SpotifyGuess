@@ -6,6 +6,7 @@ namespace SpotifyGuess
     {
         Task<string> Login(string? code);
         Task PlayTracks(string trackId);
+        Task CreatePlaylist(string name, string[] trackUris);
         Task<IEnumerable<PlaylistTrack>> GetCurrentUsersTracks(string? playlistName = null);
     }
 }

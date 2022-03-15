@@ -13,7 +13,7 @@ namespace SpotifyGuess
         readonly IUsersProfileApi _usersProfileApi;
         readonly IMemoryCache _memoryCache;
 
-        readonly string[] scopes = new[]{ "playlist-read-private", "user-modify-playback-state", "user-read-playback-state" };
+        readonly string[] scopes = new[]{ "playlist-read-private", "playlist-modify-public", "playlist-modify-private", "user-modify-playback-state", "user-read-playback-state" };
         const string lucasfogliariniId = "12145833562";
 
         public SpotifyPlayer(IUserAccountsService userAccountsService,
@@ -53,39 +53,10 @@ namespace SpotifyGuess
 
             await _playerApi.PlayTracks(trackId, GetAccessToken(), deviceId: devices[0].Id);
         }
-        public async Task<IEnumerable<TrackRate>> TracksByPopularity(string? playlistName = null, bool desc = true)
+        public async Task<IEnumerable<TrackRate>> TracksByDanceability(IEnumerable<PlaylistTrack> tracks, bool desc = true)
         {
-            var tracks = playlistName == null ? null : await GetPlaylistTracks(playlistName);
-            tracks ??= await GetCurrentUsersTracks(playlistName);
-
-            var tracksRate = tracks.Select(e => new TrackRate
-            {
-                Id = e.Track.Id,
-                Name = e.Track.Name,
-                Artists = string.Join(',', e.Track.Artists.Select(e => e.Name)),
-                Rate = e.Track.Popularity
-            });
-            return Order(tracksRate, desc);
-        }
-        public async Task<IEnumerable<TrackRate>> TracksByAge(string? playlistName = null, bool desc = true)
-        {
-            var tracks = playlistName == null ? null : await GetPlaylistTracks(playlistName);
-            tracks ??= await GetCurrentUsersTracks(playlistName);
-
-            var tracksRate = tracks.Select(e => new TrackRate
-            {
-                Id = e.Track.Id,
-                Name = e.Track.Name,
-                Artists = string.Join(',', e.Track.Artists.Select(e=>e.Name)),
-                Rate = int.Parse(e.Track.Album.ReleaseDate[..4])
-            });
-            return Order(tracksRate, desc);
-        }
-        public async Task<IEnumerable<TrackRate>> TracksByDanceability(bool desc = true)
-        {
-            var currentUsersTracks = await GetCurrentUsersTracks();
             var tracksRate = new List<TrackRate>();
-            foreach (var track in currentUsersTracks)
+            foreach (var track in tracks)
             {
                 var trackAudioFeatures = await _tracksApi.GetTrackAudioFeatures(track.Track.Id);
                 tracksRate.Add(new TrackRate
@@ -93,16 +64,15 @@ namespace SpotifyGuess
                     Id = track.Track.Id,
                     Name = track.Track.Name,
                     Artists = string.Join(',', track.Track.Artists.Select(e => e.Name)),
-                    Rate = trackAudioFeatures.Danceability
+                    Danceability = trackAudioFeatures.Danceability
                 });
             }
             return Order(tracksRate, desc);
         }
-        public async Task<IEnumerable<TrackRate>> TracksByEnergy(bool desc = true)
+        public async Task<IEnumerable<TrackRate>> TracksByEnergy(IEnumerable<PlaylistTrack> tracks, bool desc = true)
         {
-            var publicTracks = await GetCurrentUsersTracks();
             var tracksRate = new List<TrackRate>();
-            foreach (var track in publicTracks)
+            foreach (var track in tracks)
             {
                 var trackAudioFeatures = await _tracksApi.GetTrackAudioFeatures(track.Track.Id);
                 tracksRate.Add(new TrackRate
@@ -110,7 +80,7 @@ namespace SpotifyGuess
                     Id = track.Track.Id,
                     Name = track.Track.Name,
                     Artists = string.Join(',', track.Track.Artists.Select(e => e.Name)),
-                    Rate = trackAudioFeatures.Energy
+                    Energy = trackAudioFeatures.Energy
                 });
             }
             return Order(tracksRate, desc);
@@ -121,13 +91,13 @@ namespace SpotifyGuess
             //var currentUsersPlaylists = await _playlistsApi.GetCurrentUsersPlaylists(accessToken: GetAccessToken());
             var user = await _usersProfileApi.GetCurrentUsersProfile(GetAccessToken());
             var currentUsersPlaylists = await _playlistsApi.GetPlaylists(user.Id, GetAccessToken(), limit: 50);
-            var currentUsersTracks = new List<PlaylistTrack>();
             IEnumerable<PlaylistSimplified> publicPlaylistsSimplified = currentUsersPlaylists.Items;
             if (playlistName != null)
             {
                 publicPlaylistsSimplified = currentUsersPlaylists.Items.Where(e => e.Name.Contains(playlistName));
             }
 
+            var currentUsersTracks = new List<PlaylistTrack>();
             foreach (var playlist in publicPlaylistsSimplified)
             {
                 PlaylistPaged playlistPaged = await _playlistsApi.GetTracks(playlist.Id, GetAccessToken());
@@ -135,23 +105,22 @@ namespace SpotifyGuess
             }
             return currentUsersTracks;
         }
-        public async Task<IEnumerable<PlaylistTrack>> GetPlaylistTracks(string playlistId)
+
+        public async Task CreatePlaylist(string name, string[] trackUris)
         {
-            PlaylistPaged playlistPaged = new();
-            try
+            var user = await _usersProfileApi.GetCurrentUsersProfile(GetAccessToken());
+            var playlist = await _playlistsApi.CreatePlaylist(user.Id, new PlaylistDetails
             {
-                var playlist = await _playlistsApi.GetPlaylist(playlistId);
-                playlistPaged = await _playlistsApi.GetTracks(playlist.Id);
-                return playlistPaged.Items;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
+                Name = name,
+                Public = false,
+            }, GetAccessToken());
+
+            await _playlistsApi.AddItemsToPlaylist(playlist.Id, trackUris, accessToken: GetAccessToken());
         }
+
         private static IEnumerable<TrackRate> Order(IEnumerable<TrackRate> tracksRate, bool desc = true)
         {
-            return desc ? tracksRate.OrderByDescending(e => e.Rate) : tracksRate.OrderBy(e=>e.Rate);
+            return desc ? tracksRate.OrderByDescending(e => e.Popularity) : tracksRate.OrderBy(e=>e.Popularity);
         }
         private string? GetAccessToken() => _memoryCache.Get(nameof(BearerAccessToken.AccessToken)).ToString();
     }

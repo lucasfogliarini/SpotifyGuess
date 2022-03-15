@@ -1,20 +1,25 @@
 ﻿@{
-    ViewData["Title"] = "Duvido adivinhar tuas próprias músicas";
+    ViewData["Title"] = "";
 }
-@model IEnumerable<string>;
+@model IEnumerable<TrackRate>;
 
 <div class="text-center">
-    <h1 class="display-4">Duvido adivinhar tuas próprias músicas!</h1>
-    <p>1. Logue no Spotify. 
-        @if(Model == null)
-        {
-            <a href="/SpotifyPlayer/Login">Logar no Spotify</a>    
-        }  
-    </p>
-    <p>2. Abra o Spotify em qualquer plataforma. <a href="https://open.spotify.com/" target="_blank">Abrir no navegador</a></p>    
-    <p>3. Adivinhe sem olhar pro player!</p>
+    <h1 class="display-4"></h1>
     
-    <a href="/SpotifyPlayer/PlayShuffle">Toca e deixa pra mim!</a>
+    @if(Model == null)
+    {
+        @using(Html.BeginForm("LoadTracks","SpotifyPlayer"))
+        {
+            <input type="text" name="playlistName" placeholder="Vai pra Casa" value="Vai pra Casa" />
+            <input type="submit" value="Carregar Tracks!">
+        }
+    }
+    else
+    {
+        <a href="/SpotifyPlayer/CreatePlaylist">Criar Playlist</a>
+        <a href="/SpotifyPlayer/PlayShuffle">Suffle</a>
+    }
+    
     @if (ViewBag.ErrorMessage != null)
     {
         <p style="color:red">@ViewBag.ErrorMessage</p>
