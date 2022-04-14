@@ -36,20 +36,19 @@ namespace SpotifyGuess.Controllers
         {
             try
             {
-                var tracks = _memoryCache.GetOrCreate("tracks", (e) =>
+                var tracks = _spotifyPlayer.GetCurrentUsersTracks(playlistName).Result;
+                var tracksRate =  tracks.Select(e => new TrackRate
                 {
-                    var tracks = _spotifyPlayer.GetCurrentUsersTracks(playlistName).Result;
-                    return tracks.Select(e => new TrackRate
-                    {
-                        Id = e.Track.Id,
-                        Name = e.Track.Name,
-                        Uri = e.Track.Uri,
-                        Artists = string.Join(',', e.Track.Artists.Select(e => e.Name)),
-                        Popularity = e.Track.Popularity,
-                        Age = int.Parse(e.Track.Album.ReleaseDate[..4])
-                    });
-                });
-                return View(nameof(Index), tracks);
+                    Id = e.Track.Id,
+                    Name = e.Track.Name,
+                    Uri = e.Track.Uri,
+                    Artists = string.Join(',', e.Track.Artists.Select(e => e.Name)),
+                    Popularity = e.Track.Popularity,
+                    Age = e.Track.Album?.ReleaseDate == null ? 0 : int.Parse(e.Track.Album.ReleaseDate[..4])
+                }).DistinctBy(e=>e.Uri);
+
+                _memoryCache.Set("tracks", tracksRate);
+                return View(nameof(Index), tracksRate);
             }
             catch (Exception ex)
             {
@@ -96,10 +95,10 @@ namespace SpotifyGuess.Controllers
                 }
                 else if (rate == "age")
                 {
-                    tracksOrdered = tracks.OrderByDescending(e => e.Age);
+                    tracksOrdered = tracks.OrderBy(e => e.Age);
                 }
 
-                await _spotifyPlayer.CreatePlaylist("2022", tracksOrdered.Select(e=>e.Uri).ToArray());
+                await _spotifyPlayer.CreatePlaylist("A origem", tracksOrdered.Select(e=>e.Uri).ToArray());
 
                 return View(nameof(Index), tracks);
             }

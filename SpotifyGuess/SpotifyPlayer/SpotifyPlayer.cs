@@ -13,7 +13,7 @@ namespace SpotifyGuess
         readonly IUsersProfileApi _usersProfileApi;
         readonly IMemoryCache _memoryCache;
 
-        readonly string[] scopes = new[]{ "playlist-read-private", "playlist-modify-public", "playlist-modify-private", "user-modify-playback-state", "user-read-playback-state" };
+        readonly string[] scopes = new[]{ "playlist-read-private", "playlist-modify-public", "playlist-read-collaborative", "playlist-modify-private", "user-modify-playback-state", "user-read-playback-state" };
         const string lucasfogliariniId = "12145833562";
 
         public SpotifyPlayer(IUserAccountsService userAccountsService,
@@ -90,7 +90,7 @@ namespace SpotifyGuess
             //dont works yet
             //var currentUsersPlaylists = await _playlistsApi.GetCurrentUsersPlaylists(accessToken: GetAccessToken());
             var user = await _usersProfileApi.GetCurrentUsersProfile(GetAccessToken());
-            var currentUsersPlaylists = await _playlistsApi.GetPlaylists(user.Id, GetAccessToken(), limit: 50);
+            var currentUsersPlaylists = await _playlistsApi.GetPlaylists<PlaylistsSearchResult>(user.Id, GetAccessToken(), limit: 50);
             IEnumerable<PlaylistSimplified> publicPlaylistsSimplified = currentUsersPlaylists.Items;
             if (playlistName != null)
             {
@@ -106,7 +106,7 @@ namespace SpotifyGuess
             return currentUsersTracks;
         }
 
-        public async Task CreatePlaylist(string name, string[] trackUris)
+        public async Task CreatePlaylist(string name, IEnumerable<string> trackUris)
         {
             var user = await _usersProfileApi.GetCurrentUsersProfile(GetAccessToken());
             var playlist = await _playlistsApi.CreatePlaylist(user.Id, new PlaylistDetails
@@ -115,7 +115,11 @@ namespace SpotifyGuess
                 Public = false,
             }, GetAccessToken());
 
-            await _playlistsApi.AddItemsToPlaylist(playlist.Id, trackUris, accessToken: GetAccessToken());
+            for (int i = 0; i < trackUris.Count(); i+= 100)
+            {
+                var trackUris100 = trackUris.Skip(i).Take(100).ToArray();
+                await _playlistsApi.AddItemsToPlaylist(playlist.Id, trackUris100, accessToken: GetAccessToken());
+            }
         }
 
         private static IEnumerable<TrackRate> Order(IEnumerable<TrackRate> tracksRate, bool desc = true)
