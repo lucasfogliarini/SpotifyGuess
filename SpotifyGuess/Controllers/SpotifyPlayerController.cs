@@ -37,15 +37,18 @@ namespace SpotifyGuess.Controllers
             try
             {
                 var tracks = _spotifyPlayer.GetCurrentUsersTracks(playlistName).Result;
-                var tracksRate =  tracks.Select(e => new TrackRate
-                {
-                    Id = e.Track.Id,
-                    Name = e.Track.Name,
-                    Uri = e.Track.Uri,
-                    Artists = string.Join(',', e.Track.Artists.Select(e => e.Name)),
-                    Popularity = e.Track.Popularity,
-                    Age = e.Track.Album?.ReleaseDate == null ? 0 : int.Parse(e.Track.Album.ReleaseDate[..4])
-                }).DistinctBy(e=>e.Uri);
+                var tracksRate = tracks
+                                .Where(e=>e.Track.Album?.ReleaseDate != null)
+                                .Select(e => new TrackRate
+                                {
+                                    Id = e.Track.Id,
+                                    Name = e.Track.Name,
+                                    Uri = e.Track.Uri,
+                                    Artists = string.Join(',', e.Track.Artists.Select(e => e.Name)),
+                                    Popularity = e.Track.Popularity,
+                                    Age = int.Parse(e.Track.Album.ReleaseDate[..4])
+                                })
+                                .DistinctBy(e => e.Uri);
 
                 _memoryCache.Set("tracks", tracksRate);
                 return View(nameof(Index), tracksRate);

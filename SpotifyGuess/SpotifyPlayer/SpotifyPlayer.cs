@@ -90,19 +90,28 @@ namespace SpotifyGuess
             //dont works yet
             //var currentUsersPlaylists = await _playlistsApi.GetCurrentUsersPlaylists(accessToken: GetAccessToken());
             var user = await _usersProfileApi.GetCurrentUsersProfile(GetAccessToken());
-            var currentUsersPlaylists = await _playlistsApi.GetPlaylists<PlaylistsSearchResult>(user.Id, GetAccessToken(), limit: 50);
-            IEnumerable<PlaylistSimplified> publicPlaylistsSimplified = currentUsersPlaylists.Items;
-            if (playlistName != null)
-            {
-                publicPlaylistsSimplified = currentUsersPlaylists.Items.Where(e => e.Name.Contains(playlistName));
-            }
-
             var currentUsersTracks = new List<PlaylistTrack>();
-            foreach (var playlist in publicPlaylistsSimplified)
+            int offset = 0;
+            bool getMore = true;
+            while (getMore)
             {
-                PlaylistPaged playlistPaged = await _playlistsApi.GetTracks(playlist.Id, GetAccessToken());
-                currentUsersTracks.AddRange(playlistPaged.Items);
+                int limit = 50;
+                var currentUsersPlaylists = await _playlistsApi.GetPlaylists<PlaylistsSearchResult>(user.Id, GetAccessToken(), limit: limit, offset: offset);
+                IEnumerable<PlaylistSimplified> publicPlaylistsSimplified = currentUsersPlaylists.Items;
+                if (playlistName != null)
+                {
+                    publicPlaylistsSimplified = currentUsersPlaylists.Items.Where(e => e.Name.Contains(playlistName));
+                }
+                
+                foreach (var playlist in publicPlaylistsSimplified)
+                {
+                    PlaylistPaged playlistPaged = await _playlistsApi.GetTracks(playlist.Id, GetAccessToken());
+                    currentUsersTracks.AddRange(playlistPaged.Items);
+                }
+                offset += limit;
+                getMore = currentUsersPlaylists.Total > offset;
             }
+            
             return currentUsersTracks;
         }
 
