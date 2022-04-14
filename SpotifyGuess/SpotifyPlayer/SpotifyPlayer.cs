@@ -87,6 +87,8 @@ namespace SpotifyGuess
         }
         public async Task<IEnumerable<PlaylistTrack>> GetCurrentUsersTracks(string? playlistName = null)
         {
+            throw new Exception("Excluir pasta 'por década' e 1954 até agora");
+
             //dont works yet
             //var currentUsersPlaylists = await _playlistsApi.GetCurrentUsersPlaylists(accessToken: GetAccessToken());
             var user = await _usersProfileApi.GetCurrentUsersProfile(GetAccessToken());

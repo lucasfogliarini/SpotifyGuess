@@ -86,22 +86,18 @@ namespace SpotifyGuess.Controllers
             }
         }
 
-        public async Task<IActionResult> CreatePlaylist(string rate = "age")
+        public async Task<IActionResult> CreatePlaylist()
         {
             try
             {
                 var tracks = _memoryCache.Get<IEnumerable<TrackRate>>("tracks");
                 IOrderedEnumerable<TrackRate> tracksOrdered = null;
-                if (rate == "pop")
+                for (int i = 1950; i < 2023; i+=10)
                 {
-                    tracksOrdered = tracks.OrderByDescending(e => e.Popularity);
+                    var tracksDecada = tracks.Where(e => e.Age >= i && e.Age < i+10);
+                    tracksOrdered = tracksDecada.OrderByDescending(e => e.Popularity);
+                    await _spotifyPlayer.CreatePlaylist(i.ToString(), tracksOrdered.Select(e => e.Uri).ToArray());
                 }
-                else if (rate == "age")
-                {
-                    tracksOrdered = tracks.OrderBy(e => e.Age);
-                }
-
-                await _spotifyPlayer.CreatePlaylist("A origem", tracksOrdered.Select(e=>e.Uri).ToArray());
 
                 return View(nameof(Index), tracks);
             }
